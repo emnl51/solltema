@@ -1,0 +1,9 @@
+{
+  "name": "solltema-recommender",
+  "version": "0.1.0",
+  "description": "Personalized series and movie recommendations with adaptive preference learning.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

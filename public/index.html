@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solltema - Kişiye Özel Öneriler</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Yapay zeka destekli öneri motoru</p>
+        <h1>Beğeni profilinize göre dizi & film önerileri</h1>
+        <p class="subheading">
+          İçeriklere puan verin, sistem beğeni profilinizi öğrenerek her yeni öneride size
+          daha uygun içerikler sunsun.
+        </p>
+      </div>
+      <div class="profile-card">
+        <h2>Beğeni Profili</h2>
+        <p>Öne çıkan etiketler:</p>
+        <ul id="profile-tags" class="tag-list"></ul>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel">
+        <h2>Puanla ve Öğret</h2>
+        <div id="content-list" class="grid"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Kişiye Özel Öneriler</h2>
+        <p class="helper">Puanlama yaptıkça öneriler otomatik güncellenir.</p>
+        <div id="recommendations" class="grid"></div>
+      </section>
+    </main>
+
+    <footer>
+      <p>Solltema • Öğrenen öneri sistemi demosu</p>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>

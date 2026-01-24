@@ -1,0 +1,153 @@
+:root {
+  color-scheme: light;
+  font-family: "Inter", system-ui, sans-serif;
+  background: #f5f6fb;
+  color: #1f2430;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+.hero {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3rem 6vw 2rem;
+  background: linear-gradient(120deg, #f8fbff, #ecf1ff);
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.8rem;
+  color: #5864ff;
+  margin-bottom: 0.8rem;
+}
+
+.subheading {
+  max-width: 520px;
+  color: #4c566a;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.profile-card {
+  background: #ffffff;
+  padding: 1.5rem;
+  border-radius: 16px;
+  min-width: 260px;
+  box-shadow: 0 20px 40px rgba(44, 62, 115, 0.15);
+}
+
+main {
+  padding: 2rem 6vw 4rem;
+}
+
+.panel {
+  margin-bottom: 2.5rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 200px;
+  box-shadow: 0 15px 30px rgba(15, 23, 42, 0.08);
+}
+
+.card.recommend {
+  border: 1px solid #dbe2ff;
+}
+
+.pill {
+  display: inline-block;
+  background: #eef1ff;
+  color: #4955ff;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  margin: 0 0 0.6rem;
+}
+
+.meta {
+  color: #5e667d;
+  font-size: 0.9rem;
+}
+
+.rating {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.rating button {
+  flex: 1;
+  border: none;
+  background: #f0f2ff;
+  color: #4a55ff;
+  padding: 0.4rem 0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: 0.2s ease;
+  font-weight: 600;
+}
+
+.rating button:hover {
+  background: #4a55ff;
+  color: #ffffff;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0;
+  list-style: none;
+}
+
+.tag {
+  background: #f1f4ff;
+  color: #4c56ff;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+.tag.muted {
+  background: #f4f4f4;
+  color: #8b90a4;
+}
+
+.helper {
+  color: #6c7286;
+  margin-bottom: 1rem;
+}
+
+footer {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #8a93a8;
+}
+
+@media (max-width: 720px) {
+  .hero {
+    padding: 2.5rem 6vw 1.5rem;
+  }
+}
