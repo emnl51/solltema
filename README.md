@@ -8,6 +8,7 @@ A lightweight hybrid movie recommendation demo that combines real-time signal in
 - **Hybrid ranking** that blends content scores, matrix-factorization embeddings, and a trained profile model.
 - **Client-side model training** with TensorFlow.js to refine recommendation quality.
 - **Online learning loop** that updates the user factors with every feedback tap.
+- **Profile import/export** via JSON or CSV to resume personalization.
 - **Live signal panel** showcasing simulated real-time data insights.
 - **Responsive UI** designed for web and mobile layouts.
 
@@ -32,8 +33,10 @@ A lightweight hybrid movie recommendation demo that combines real-time signal in
 
 1. Create or update a user profile and adjust genre affinities.
 2. Train the profile model to generate personalized content scores.
-3. Tap a recommendation to send feedback and trigger online learning.
-4. Watch the hybrid ranking update in real time.
+3. Export the profile to JSON or CSV as needed.
+4. Import a profile later to restore personalization.
+5. Tap a recommendation to send feedback and trigger online learning.
+6. Watch the hybrid ranking update in real time.
 
 ## API Endpoints
 

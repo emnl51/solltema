@@ -88,6 +88,34 @@ const useLiveSignals = () => {
   return signals;
 };
 
+const buildCsv = (headers, rows) => {
+  const escapeValue = (value) => {
+    const stringValue = String(value ?? "");
+    if (/[",\n]/.test(stringValue)) {
+      return `"${stringValue.replace(/"/g, '""')}"`;
+    }
+    return stringValue;
+  };
+
+  return [headers, ...rows].map((row) => row.map(escapeValue).join(",")).join("\n");
+};
+
+const parseCsv = (csvText) => {
+  const lines = csvText.trim().split(/\r?\n/);
+  if (lines.length < 2) {
+    return [];
+  }
+
+  const headers = lines[0].split(",").map((header) => header.trim());
+  return lines.slice(1).map((line) => {
+    const values = line.split(",");
+    return headers.reduce((acc, header, index) => {
+      acc[header] = values[index] ?? "";
+      return acc;
+    }, {});
+  });
+};
+
 const HybridApp = () => {
   const [profile, setProfile] = useState(createProfile());
   const [profileName, setProfileName] = useState("Aylin");
@@ -97,8 +125,10 @@ const HybridApp = () => {
   const [isTraining, setIsTraining] = useState(false);
   const [modelStatus, setModelStatus] = useState("Not trained");
   const [modelMetrics, setModelMetrics] = useState(null);
+  const [importMessage, setImportMessage] = useState("");
 
   const modelRef = useRef(null);
+  const fileInputRef = useRef(null);
   const liveSignals = useLiveSignals();
 
   const recommendations = useMemo(() => {
@@ -210,12 +240,121 @@ const HybridApp = () => {
     }
   };
 
+  const buildExportPayload = () => ({
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    profile: {
+      name: profileName,
+      goal: profileGoal,
+      affinities: profile
+    },
+    userFactors,
+    feedbackLog
+  });
+
+  const downloadFile = (filename, content, type) => {
+    const blob = new Blob([content], { type });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const exportJson = () => {
+    const payload = buildExportPayload();
+    downloadFile(
+      `profile-export-${profileName || "user"}.json`,
+      JSON.stringify(payload, null, 2),
+      "application/json"
+    );
+  };
+
+  const exportCsv = () => {
+    const payload = buildExportPayload();
+    const rows = GENRES.map((genre) => [
+      profileName,
+      profileGoal,
+      genre,
+      payload.profile.affinities[genre],
+      userFactors[GENRES.indexOf(genre)] ?? "",
+      feedbackLog[0]?.rating ?? ""
+    ]);
+
+    const csvContent = buildCsv(
+      [
+        "profileName",
+        "profileGoal",
+        "genre",
+        "affinity",
+        "userFactor",
+        "latestRating"
+      ],
+      rows
+    );
+    downloadFile(`profile-export-${profileName || "user"}.csv`, csvContent, "text/csv");
+  };
+
+  const handleImport = (event) => {
+    const file = event.target.files[0];
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        if (file.name.endsWith(".json")) {
+          const payload = JSON.parse(reader.result);
+          if (!payload.profile || !payload.profile.affinities) {
+            throw new Error("JSON profile missing.");
+          }
+          setProfileName(payload.profile.name || "Imported user");
+          setProfileGoal(payload.profile.goal || "");
+          setProfile({ ...createProfile(), ...payload.profile.affinities });
+          setUserFactors(payload.userFactors || INITIAL_FACTORS.users.u1);
+          setFeedbackLog(payload.feedbackLog || []);
+          setImportMessage("JSON profile imported successfully.");
+        } else if (file.name.endsWith(".csv")) {
+          const rows = parseCsv(reader.result);
+          if (!rows.length) {
+            throw new Error("CSV file is empty.");
+          }
+          const name = rows[0].profileName || "Imported user";
+          const goal = rows[0].profileGoal || "";
+          const affinities = rows.reduce((acc, row) => {
+            if (row.genre && GENRES.includes(row.genre)) {
+              acc[row.genre] = Number(row.affinity) || 0;
+            }
+            return acc;
+          }, {});
+          const factors = rows.map((row) => Number(row.userFactor) || 0);
+          setProfileName(name);
+          setProfileGoal(goal);
+          setProfile({ ...createProfile(), ...affinities });
+          if (factors.length >= GENRES.length) {
+            setUserFactors(factors.slice(0, userFactors.length));
+          }
+          setImportMessage("CSV profile imported successfully.");
+        } else {
+          throw new Error("Unsupported file format.");
+        }
+      } catch (error) {
+        setImportMessage(`Import failed: ${error.message}`);
+      }
+    };
+
+    reader.readAsText(file);
+    event.target.value = "";
+  };
+
   const resetProfile = () => {
     setProfile(createProfile());
     setUserFactors(INITIAL_FACTORS.users.u1);
     setFeedbackLog([]);
     setModelStatus("Not trained");
     setModelMetrics(null);
+    setImportMessage("");
     modelRef.current = null;
   };
 
@@ -329,6 +468,34 @@ const HybridApp = () => {
               Train profile model
             </button>
           </div>
+        </section>
+
+        <section className="panel">
+          <h2>Import & export profiles</h2>
+          <p>
+            Export your profile and feedback to JSON or CSV, then re-import it later to resume
+            personalized recommendations.
+          </p>
+          <div className="controls">
+            <button onClick={exportJson}>Export JSON</button>
+            <button className="secondary" onClick={exportCsv}>
+              Export CSV
+            </button>
+            <button
+              className="secondary"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Import JSON/CSV
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.csv"
+              className="file-input"
+              onChange={handleImport}
+            />
+          </div>
+          {importMessage ? <div className="import-message">{importMessage}</div> : null}
         </section>
 
         <section className="panel">

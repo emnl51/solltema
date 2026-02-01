@@ -118,6 +118,19 @@ body {
   color: #64748b;
 }
 
+.import-message {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  font-size: 0.9rem;
+}
+
+.file-input {
+  display: none;
+}
+
 .recommendation {
   padding: 16px;
   border-radius: 14px;
