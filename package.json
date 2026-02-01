@@ -1,0 +1,9 @@
+{
+  "name": "solltema-movie-recs",
+  "version": "1.0.0",
+  "description": "Hybrid movie recommendation webapp with Node.js, React, and TensorFlow.js",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
