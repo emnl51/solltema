@@ -18,7 +18,11 @@ const AuthPage = () => {
 
     try {
       if (isSignUp) {
-        await signUp(email, password, displayName);
+        const normalizedDisplayName = displayName.trim();
+        if (!normalizedDisplayName) {
+          throw new Error('İsim alanı zorunludur.');
+        }
+        await signUp(email, password, normalizedDisplayName);
       } else {
         await signIn(email, password);
       }
