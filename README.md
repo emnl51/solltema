@@ -1,5 +1,14 @@
 # Solltema Hybrid Movie Recommender
 
+A lightweight hybrid movie recommendation demo that combines real-time signal ingestion, content-based filtering, matrix factorization, modeling, and online learning. The prototype uses a small Node.js HTTP server and a React + TensorFlow.js front-end.
+
+## Features
+
+- **User profile creation** with affinity sliders and goal setting.
+- **Hybrid ranking** that blends content scores, matrix-factorization embeddings, and a trained profile model.
+- **Client-side model training** with TensorFlow.js to refine recommendation quality.
+- **Online learning loop** that updates the user factors with every feedback tap.
+- **Profile import/export** via JSON or CSV to resume personalization.
 A lightweight hybrid movie recommendation demo that combines real-time signal ingestion, content-based filtering, matrix factorization, and online learning. The prototype uses a small Node.js HTTP server and a React + TensorFlow.js front-end.
 
 ## Features
@@ -25,6 +34,15 @@ A lightweight hybrid movie recommendation demo that combines real-time signal in
    ```
    http://localhost:3000
    ```
+
+## Demo Flow
+
+1. Create or update a user profile and adjust genre affinities.
+2. Train the profile model to generate personalized content scores.
+3. Export the profile to JSON or CSV as needed.
+4. Import a profile later to restore personalization.
+5. Tap a recommendation to send feedback and trigger online learning.
+6. Watch the hybrid ranking update in real time.
 
 ## API Endpoints
 
