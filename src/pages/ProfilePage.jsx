@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLocalStorage } from '../contexts/LocalStorageContext';
+import ContentCard from '../components/ContentCard';
 
 const ProfilePage = () => {
   const { user, updateUserDisplayName, getRatings, getContent } = useLocalStorage();
@@ -27,9 +28,9 @@ const ProfilePage = () => {
         }))
       );
 
-      setAllRatings(ratingsWithContent.sort((a, b) =>
-        new Date(b.updatedAt) - new Date(a.updatedAt)
-      ));
+      setAllRatings(
+        ratingsWithContent.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+      );
 
       const genres = {};
       const directors = {};
@@ -38,7 +39,7 @@ const ProfilePage = () => {
 
       ratings.forEach((rating) => {
         totalRating += rating.rating;
-        const content = ratingsWithContent.find(r => r.contentId === rating.contentId)?.content;
+        const content = ratingsWithContent.find((r) => r.contentId === rating.contentId)?.content;
 
         if (content) {
           if (content.genre) {
@@ -87,7 +88,7 @@ const ProfilePage = () => {
     }
   };
 
-  const getTopGenres = () => {
+  const topGenres = useMemo(() => {
     if (!preferences?.favorite_genres) return [];
     const entries = Object.entries(preferences.favorite_genres);
     entries.sort((a, b) => b[1] - a[1]);
@@ -96,21 +97,7 @@ const ProfilePage = () => {
       genre,
       percentage: total > 0 ? (score / total) * 100 : 0,
     }));
-  };
-
-  const getTopActors = () => {
-    if (!preferences?.favorite_actors) return [];
-    const entries = Object.entries(preferences.favorite_actors);
-    entries.sort((a, b) => b[1] - a[1]);
-    return entries.slice(0, 10).map(([actor, count]) => ({ actor, count }));
-  };
-
-  const getTopDirectors = () => {
-    if (!preferences?.favorite_directors) return [];
-    const entries = Object.entries(preferences.favorite_directors);
-    entries.sort((a, b) => b[1] - a[1]);
-    return entries.slice(0, 10).map(([director, count]) => ({ director, count }));
-  };
+  }, [preferences]);
 
   if (loading) {
     return (
@@ -120,15 +107,11 @@ const ProfilePage = () => {
     );
   }
 
-  const topGenres = getTopGenres();
-  const topActors = getTopActors();
-  const topDirectors = getTopDirectors();
-
   return (
     <div className="page-grid">
       <div className="panel" style={{ gridColumn: '1 / -1' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '20px' }}>
-          <div style={{ flex: 1 }}>
+        <div className="profile-header">
+          <div>
             {isEditing ? (
               <div className="form-grid">
                 <label>
@@ -149,6 +132,7 @@ const ProfilePage = () => {
             ) : (
               <>
                 <h2>{user?.displayName || 'Kullanıcı'}</h2>
+                <p className="muted">Kütüphanen ve tercihlerin burada.</p>
                 <button className="ghost" onClick={() => setIsEditing(true)}>
                   Profili Düzenle
                 </button>
@@ -173,9 +157,7 @@ const ProfilePage = () => {
       {topGenres.length > 0 && (
         <div className="panel">
           <h2>Favori Türler</h2>
-          <p style={{ color: '#94a3b8', marginBottom: '16px' }}>
-            Puanladığın içeriklere göre tür dağılımın
-          </p>
+          <p className="muted">Puanladığın içeriklere göre tür dağılımın</p>
           <div className="genre-bars">
             {topGenres.map(({ genre, percentage }) => (
               <div key={genre} className="genre-bar">
@@ -192,69 +174,20 @@ const ProfilePage = () => {
         </div>
       )}
 
-      {topActors.length > 0 && (
-        <div className="panel">
-          <h2>En Beğendiğin Oyuncular</h2>
-          <p style={{ color: '#94a3b8', marginBottom: '16px' }}>
-            Puanladığın filmlerde en sık karşılaştığın oyuncular
-          </p>
-          <div className="actor-list">
-            {topActors.map(({ actor, count }) => (
-              <div key={actor} className="actor-item">
-                <span className="actor-name">{actor}</span>
-                <span className="actor-count">{count} film</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {topDirectors.length > 0 && (
-        <div className="panel">
-          <h2>En Beğendiğin Yönetmenler</h2>
-          <p style={{ color: '#94a3b8', marginBottom: '16px' }}>
-            Puanladığın filmlerde en sık karşılaştığın yönetmenler
-          </p>
-          <div className="director-list">
-            {topDirectors.map(({ director, count }) => (
-              <div key={director} className="director-item">
-                <span className="director-name">{director}</span>
-                <span className="director-count">{count} film</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div className="panel" style={{ gridColumn: '1 / -1' }}>
-        <h2>Son Puanladıklarım ({allRatings.length})</h2>
+        <h2>Kütüphanem ({allRatings.length})</h2>
         {allRatings.length === 0 ? (
-          <p style={{ color: '#94a3b8' }}>Henüz hiçbir içerik puanlamadın.</p>
+          <p className="muted">Henüz hiçbir içerik puanlamadın.</p>
         ) : (
-          <div className="movie-grid">
+          <div className="content-grid">
             {allRatings.slice(0, 12).map((rating) => (
-              <div key={rating.id} className="movie-card">
-                <img
-                  src={
-                    rating.content?.poster && rating.content.poster !== 'N/A'
-                      ? rating.content.poster
-                      : 'https://via.placeholder.com/200x300?text=No+Poster'
-                  }
-                  alt={rating.content?.title}
-                  className="movie-poster"
-                />
-                <div className="movie-info">
-                  <div className="movie-title">{rating.content?.title}</div>
-                  <div className="movie-year">
-                    Puanın: {rating.rating}/10
-                  </div>
-                  {rating.review && (
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>
-                      {rating.review.slice(0, 50)}...
-                    </div>
-                  )}
-                </div>
-              </div>
+              <ContentCard
+                key={rating.id}
+                content={rating.content}
+                badge={`Puan ${rating.rating}/10`}
+                reason={rating.review ? `Notun: ${rating.review}` : 'Kütüphanene ekledin.'}
+                footer={<span className="content-card-foot">Son güncelleme: {new Date(rating.updatedAt).toLocaleDateString('tr-TR')}</span>}
+              />
             ))}
           </div>
         )}
