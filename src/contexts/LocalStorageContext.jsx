@@ -126,6 +126,59 @@ const getAllContents = async () => {
   });
 };
 
+const clearStore = async (storeName) => {
+  const database = await initDB();
+  const tx = database.transaction([storeName], 'readwrite');
+  const store = tx.objectStore(storeName);
+
+  return new Promise((resolve, reject) => {
+    const request = store.clear();
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+};
+
+const exportData = async (currentUser) => {
+  const [ratings, contents] = await Promise.all([getRatings(), getAllContents()]);
+
+  return {
+    user: currentUser,
+    ratings,
+    contents,
+    exportedAt: new Date().toISOString(),
+    version: 1,
+  };
+};
+
+const importData = async (payload) => {
+  if (!payload || (!payload.ratings && !payload.contents)) {
+    throw new Error('İçe aktarma verisi geçersiz.');
+  }
+
+  await clearStore(RATINGS_STORE);
+  await clearStore(CONTENTS_STORE);
+
+  const database = await initDB();
+  const tx = database.transaction([RATINGS_STORE, CONTENTS_STORE], 'readwrite');
+  const ratingStore = tx.objectStore(RATINGS_STORE);
+  const contentStore = tx.objectStore(CONTENTS_STORE);
+
+  (payload.contents || []).forEach((content) => {
+    contentStore.put(content);
+  });
+
+  (payload.ratings || []).forEach((rating, index) => {
+    const ratingWithId = rating.id ? rating : { ...rating, id: index + 1 };
+    ratingStore.put(ratingWithId);
+  });
+
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve(payload.user);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+};
+
 export const LocalStorageProvider = ({ children }) => {
   const [user, setUser] = useState(DEFAULT_USER);
   const [loading, setLoading] = useState(true);
@@ -155,6 +208,17 @@ export const LocalStorageProvider = ({ children }) => {
     localStorage.setItem('movieAppUser', JSON.stringify(updatedUser));
   };
 
+  const handleExport = async () => exportData(user);
+
+  const handleImport = async (payload) => {
+    const nextUser = await importData(payload);
+
+    if (nextUser) {
+      setUser(nextUser);
+      localStorage.setItem('movieAppUser', JSON.stringify(nextUser));
+    }
+  };
+
   const value = {
     user,
     loading,
@@ -164,6 +228,8 @@ export const LocalStorageProvider = ({ children }) => {
     saveContent,
     getContent,
     getAllContents,
+    exportData: handleExport,
+    importData: handleImport,
   };
 
   return (

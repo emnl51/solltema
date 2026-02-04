@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocalStorage } from '../contexts/LocalStorageContext';
 import { fetchById } from '../lib/omdb';
+import ContentCard from '../components/ContentCard';
 
 const HERO_ID = 'tt3896198';
 const FEATURED_IDS = [
@@ -53,6 +54,11 @@ const HomePage = () => {
   const [featured, setFeatured] = useState([]);
   const [forYou, setForYou] = useState([]);
   const [recentRatings, setRecentRatings] = useState([]);
+  const [preferences, setPreferences] = useState({
+    genres: {},
+    actors: {},
+    directors: {},
+  });
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -87,6 +93,9 @@ const HomePage = () => {
       setRecentRatings(sorted);
 
       const genreScores = {};
+      const actorScores = {};
+      const directorScores = {};
+
       ratingsWithContent.forEach((rating) => {
         if (rating.content?.genre) {
           rating.content.genre.split(',').forEach((genre) => {
@@ -94,6 +103,26 @@ const HomePage = () => {
             genreScores[trimmed] = (genreScores[trimmed] || 0) + rating.rating;
           });
         }
+
+        if (rating.content?.actors) {
+          rating.content.actors.split(',').forEach((actor) => {
+            const trimmed = actor.trim();
+            actorScores[trimmed] = (actorScores[trimmed] || 0) + 1;
+          });
+        }
+
+        if (rating.content?.director && rating.content.director !== 'N/A') {
+          rating.content.director.split(',').forEach((director) => {
+            const trimmed = director.trim();
+            directorScores[trimmed] = (directorScores[trimmed] || 0) + 1;
+          });
+        }
+      });
+
+      setPreferences({
+        genres: genreScores,
+        actors: actorScores,
+        directors: directorScores,
       });
 
       const pool = await Promise.all(CURATED_POOL_IDS.map((id) => fetchById(id)));
@@ -118,7 +147,7 @@ const HomePage = () => {
       });
 
       scored.sort((a, b) => b.score - a.score);
-      setForYou(scored.slice(0, 8));
+      setForYou(scored.slice(0, 4));
     } catch (error) {
       console.error('Error loading dashboard:', error);
       setErrorMessage('OMDb verileri yüklenirken bir sorun oluştu. Lütfen tekrar deneyin.');
@@ -158,6 +187,49 @@ const HomePage = () => {
       favoriteGenre: topGenre ? topGenre[0] : '-',
     };
   }, [recentRatings]);
+
+  const getReason = (content) => {
+    if (!content) return '';
+
+    const reasons = [];
+
+    if (content.genre) {
+      const topGenres = Object.entries(preferences.genres)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 2)
+        .map(([genre]) => genre);
+      const matchingGenres = content.genre
+        .split(',')
+        .map((genre) => genre.trim())
+        .filter((genre) => topGenres.includes(genre));
+
+      if (matchingGenres.length > 0) {
+        reasons.push(`Sevdiğin türlerle eşleşiyor: ${matchingGenres.join(', ')}`);
+      }
+    }
+
+    const topActors = Object.entries(preferences.actors)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([actor]) => actor);
+
+    if (content.actors) {
+      const matchingActors = content.actors
+        .split(',')
+        .map((actor) => actor.trim())
+        .filter((actor) => topActors.includes(actor));
+
+      if (matchingActors.length > 0) {
+        reasons.push(`Daha önce beğendiğin oyuncular var: ${matchingActors.join(', ')}`);
+      }
+    }
+
+    if (reasons.length === 0) {
+      return 'IMDb puanı yüksek olduğu için öne çıkarıldı.';
+    }
+
+    return reasons.join(' • ');
+  };
 
   if (loading && !hero) {
     return (
@@ -206,21 +278,14 @@ const HomePage = () => {
             </p>
           </div>
         </div>
-        <div className="movie-grid">
+        <div className="content-grid">
           {featured.map((content) => (
-            <div key={content.imdbId} className="movie-card">
-              <img
-                src={getPoster(content.poster)}
-                alt={content.title}
-                className="movie-poster"
-              />
-              <div className="movie-info">
-                <div className="movie-title">{content.title}</div>
-                <div className="movie-year">
-                  {content.year} • {content.type === 'series' ? 'Dizi' : 'Film'}
-                </div>
-              </div>
-            </div>
+            <ContentCard
+              key={content.imdbId}
+              content={content}
+              badge={content.type === 'series' ? 'Dizi' : 'Film'}
+              footer={<span className="content-card-foot">IMDb {content.imdbRating}</span>}
+            />
           ))}
         </div>
       </div>
@@ -247,6 +312,24 @@ const HomePage = () => {
             </div>
             <div className="stat-detail">En çok beğenilen</div>
           </div>
+        </div>
+      </div>
+
+      <div className="panel" style={{ gridColumn: '1 / -1' }}>
+        <h2>{user?.displayName || 'Kullanıcı'} için kişisel öneriler</h2>
+        <p className="muted">
+          Profilindeki beğenilerden oluşan öne çıkan içerikler.
+        </p>
+        <div className="content-grid">
+          {forYou.map((content) => (
+            <ContentCard
+              key={content.imdbId}
+              content={content}
+              badge={`Skor ${content.score.toFixed(1)}`}
+              reason={getReason(content)}
+              footer={<span className="content-card-foot">IMDb {content.imdbRating}</span>}
+            />
+          ))}
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocalStorage } from '../contexts/LocalStorageContext';
 import { fetchById } from '../lib/omdb';
+import ContentCard from '../components/ContentCard';
 
 const RECOMMENDATION_POOL = [
   'tt3896198',
@@ -42,9 +43,6 @@ const normalizeOmdb = (data) => ({
   runtime: data.Runtime,
   type: data.Type,
 });
-
-const getPoster = (poster) =>
-  poster && poster !== 'N/A' ? poster : 'https://via.placeholder.com/200x300?text=No+Poster';
 
 const parseYear = (year) => {
   if (!year) return null;
@@ -207,30 +205,63 @@ const AIRecommendations = () => {
     });
   }, [filters, recommendations]);
 
-  const renderReasonTags = (content) => {
-    if (!preferences?.favorite_genres || !content.genre) return null;
+  const buildReason = (content) => {
+    if (!preferences) {
+      return 'IMDb puanı ve popülerlik metrikleri ile önerildi.';
+    }
+
+    const reasons = [];
 
     const topGenres = Object.entries(preferences.favorite_genres)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
+      .slice(0, 2)
       .map(([genre]) => genre);
 
-    const matches = content.genre
-      .split(',')
-      .map((g) => g.trim())
-      .filter((genre) => topGenres.includes(genre));
+    if (content.genre) {
+      const matches = content.genre
+        .split(',')
+        .map((g) => g.trim())
+        .filter((genre) => topGenres.includes(genre));
+      if (matches.length > 0) {
+        reasons.push(`Sevdiğin türlerle örtüşüyor: ${matches.join(', ')}`);
+      }
+    }
 
-    if (matches.length === 0) return null;
+    const topDirectors = Object.entries(preferences.favorite_directors)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 1)
+      .map(([director]) => director);
 
-    return (
-      <div className="tag-row">
-        {matches.slice(0, 2).map((genre) => (
-          <span key={genre} className="tag">
-            {genre}
-          </span>
-        ))}
-      </div>
-    );
+    if (content.director && topDirectors.length > 0) {
+      const matches = content.director
+        .split(',')
+        .map((d) => d.trim())
+        .filter((director) => topDirectors.includes(director));
+      if (matches.length > 0) {
+        reasons.push(`Favori yönetmenlerinden: ${matches.join(', ')}`);
+      }
+    }
+
+    const topActors = Object.entries(preferences.favorite_actors)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([actor]) => actor);
+
+    if (content.actors && topActors.length > 0) {
+      const matches = content.actors
+        .split(',')
+        .map((a) => a.trim())
+        .filter((actor) => topActors.includes(actor));
+      if (matches.length > 0) {
+        reasons.push(`Beğendiğin oyuncular var: ${matches.join(', ')}`);
+      }
+    }
+
+    if (reasons.length === 0) {
+      return 'İzleme geçmişinle uyumlu yüksek puanlı içerik.';
+    }
+
+    return reasons.join(' • ');
   };
 
   if (loading) {
@@ -309,25 +340,15 @@ const AIRecommendations = () => {
         </div>
       ) : (
         <div className="panel">
-          <div className="movie-grid">
+          <div className="content-grid">
             {filteredRecommendations.slice(0, 12).map((content) => (
-              <div key={content.imdbId} className="movie-card">
-                <img
-                  src={getPoster(content.poster)}
-                  alt={content.title}
-                  className="movie-poster"
-                />
-                <div className="movie-info">
-                  <div className="movie-title">{content.title}</div>
-                  <div className="movie-year">
-                    {content.year} • IMDb: {content.imdbRating.toFixed(1)}
-                  </div>
-                  {content.aiScore && (
-                    <div className="score-badge">AI Skoru: {content.aiScore.toFixed(1)}</div>
-                  )}
-                  {renderReasonTags(content)}
-                </div>
-              </div>
+              <ContentCard
+                key={content.imdbId}
+                content={content}
+                badge={`AI ${content.aiScore.toFixed(1)}`}
+                reason={buildReason(content)}
+                footer={<span className="content-card-foot">IMDb {content.imdbRating.toFixed(1)}</span>}
+              />
             ))}
           </div>
         </div>
