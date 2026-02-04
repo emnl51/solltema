@@ -100,17 +100,42 @@ export const AuthProvider = ({ children }) => {
       throw new Error('E-posta ve şifre alanları zorunludur.');
     }
 
-    let signUpData;
+    const { data, error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password: normalizedPassword,
+    });
+
+    if (!normalizedEmail || !normalizedPassword) {
+      throw new Error('E-posta ve şifre alanları zorunludur.');
+    }
+
+    let data;
     try {
       const response = await supabase.auth.signUp({
         email: normalizedEmail,
         password: normalizedPassword,
       });
-      signUpData = response.data;
+      data = response.data;
 
       if (response.error) throw response.error;
     } catch (error) {
       throw normalizeAuthError(error);
+    }
+
+    if (data.user) {
+      const { error: profileError } = await supabase.from('profiles').upsert(
+        {
+          user_id: data.user.id,
+          display_name: normalizedDisplayName || 'Kullanıcı',
+        },
+        {
+          onConflict: 'user_id',
+        }
+      );
+
+      if (profileError) {
+        throw profileError;
+      }
     }
 
     if (signUpData?.user) {
@@ -139,6 +164,15 @@ export const AuthProvider = ({ children }) => {
   const signIn = async (email, password) => {
     const normalizedEmail = email?.trim();
     const normalizedPassword = password?.trim();
+
+    if (!normalizedEmail || !normalizedPassword) {
+      throw new Error('E-posta ve şifre alanları zorunludur.');
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password: normalizedPassword,
+    });
 
     if (!normalizedEmail || !normalizedPassword) {
       throw new Error('E-posta ve şifre alanları zorunludur.');
