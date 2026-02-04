@@ -1,11 +1,69 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLocalStorage } from '../contexts/LocalStorageContext';
+import { fetchById } from '../lib/omdb';
+
+const RECOMMENDATION_POOL = [
+  'tt3896198',
+  'tt1375666',
+  'tt0111161',
+  'tt0068646',
+  'tt0109830',
+  'tt0167260',
+  'tt0108778',
+  'tt0903747',
+  'tt0944947',
+  'tt7286456',
+  'tt0133093',
+  'tt0080684',
+  'tt0266697',
+  'tt1345836',
+  'tt1877830',
+  'tt4574334',
+  'tt6751668',
+  'tt1187043',
+  'tt0877057',
+  'tt0796366',
+  'tt0107290',
+  'tt8579674',
+  'tt6470478',
+  'tt0458290',
+];
+
+const normalizeOmdb = (data) => ({
+  imdbId: data.imdbID,
+  title: data.Title,
+  year: data.Year,
+  genre: data.Genre,
+  director: data.Director,
+  actors: data.Actors,
+  plot: data.Plot,
+  poster: data.Poster,
+  imdbRating: parseFloat(data.imdbRating) || 0,
+  runtime: data.Runtime,
+  type: data.Type,
+});
+
+const getPoster = (poster) =>
+  poster && poster !== 'N/A' ? poster : 'https://via.placeholder.com/200x300?text=No+Poster';
+
+const parseYear = (year) => {
+  if (!year) return null;
+  const match = year.match(/\d{4}/);
+  return match ? Number(match[0]) : null;
+};
 
 const AIRecommendations = () => {
   const { getRatings, getAllContents } = useLocalStorage();
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [preferences, setPreferences] = useState(null);
+  const [filters, setFilters] = useState({
+    genre: '',
+    type: '',
+    yearFrom: '',
+    yearTo: '',
+  });
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     loadRecommendations();
@@ -13,12 +71,17 @@ const AIRecommendations = () => {
 
   const loadRecommendations = async () => {
     try {
-      const ratings = await getRatings();
-      const allContents = await getAllContents();
+      setLoading(true);
+      setErrorMessage('');
+      const [ratings, storedContents, poolDetails] = await Promise.all([
+        getRatings(),
+        getAllContents(),
+        Promise.all(RECOMMENDATION_POOL.map((id) => fetchById(id))),
+      ]);
 
-      const ratedIds = ratings.map((r) => r.contentId);
-
-      const availableContents = allContents.filter((c) => !ratedIds.includes(c.imdbId));
+      const pool = poolDetails.map(normalizeOmdb);
+      const ratedIds = new Set(ratings.map((r) => r.contentId));
+      const availableContents = pool.filter((content) => !ratedIds.has(content.imdbId));
 
       const genres = {};
       const directors = {};
@@ -27,7 +90,7 @@ const AIRecommendations = () => {
 
       ratings.forEach((rating) => {
         totalRating += rating.rating;
-        const content = allContents.find((c) => c.imdbId === rating.contentId);
+        const content = storedContents.find((c) => c.imdbId === rating.contentId);
 
         if (content) {
           if (content.genre) {
@@ -65,53 +128,109 @@ const AIRecommendations = () => {
 
       setPreferences(userPrefs);
 
-      if (availableContents.length > 0 && Object.keys(genres).length > 0) {
-        const scored = availableContents.map((content) => {
-          let score = parseFloat(content.imdbRating) || 0;
+      const scored = availableContents.map((content) => {
+        let score = content.imdbRating || 0;
 
-          if (content.genre) {
-            const contentGenres = content.genre.split(',').map((g) => g.trim());
-            contentGenres.forEach((genre) => {
-              if (genres[genre]) {
-                score += genres[genre] * 0.5;
-              }
-            });
-          }
+        if (content.genre) {
+          const contentGenres = content.genre.split(',').map((g) => g.trim());
+          contentGenres.forEach((genre) => {
+            if (genres[genre]) {
+              score += genres[genre] * 0.6;
+            }
+          });
+        }
 
-          if (content.director && directors) {
-            const directorsList = content.director.split(',').map((d) => d.trim());
-            directorsList.forEach((director) => {
-              if (directors[director]) {
-                score += directors[director] * 0.3;
-              }
-            });
-          }
+        if (content.director && directors) {
+          const directorsList = content.director.split(',').map((d) => d.trim());
+          directorsList.forEach((director) => {
+            if (directors[director]) {
+              score += directors[director] * 0.3;
+            }
+          });
+        }
 
-          if (content.actors && actors) {
-            const actorsList = content.actors.split(',').map((a) => a.trim());
-            actorsList.forEach((actor) => {
-              if (actors[actor]) {
-                score += actors[actor] * 0.2;
-              }
-            });
-          }
+        if (content.actors && actors) {
+          const actorsList = content.actors.split(',').map((a) => a.trim());
+          actorsList.forEach((actor) => {
+            if (actors[actor]) {
+              score += actors[actor] * 0.2;
+            }
+          });
+        }
 
-          return { ...content, aiScore: score };
-        });
+        return { ...content, aiScore: score };
+      });
 
-        scored.sort((a, b) => b.aiScore - a.aiScore);
-        setRecommendations(scored.slice(0, 12));
-      } else {
-        const topByRating = availableContents.sort((a, b) =>
-          (parseFloat(b.imdbRating) || 0) - (parseFloat(a.imdbRating) || 0)
-        ).slice(0, 12);
-        setRecommendations(topByRating);
-      }
+      scored.sort((a, b) => b.aiScore - a.aiScore);
+      setRecommendations(scored);
     } catch (error) {
       console.error('Error loading recommendations:', error);
+      setErrorMessage('OMDb önerileri yüklenirken bir hata oluştu.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const availableGenres = useMemo(() => {
+    const set = new Set();
+    recommendations.forEach((content) => {
+      if (content.genre) {
+        content.genre.split(',').forEach((genre) => set.add(genre.trim()));
+      }
+    });
+    return Array.from(set).sort();
+  }, [recommendations]);
+
+  const filteredRecommendations = useMemo(() => {
+    return recommendations.filter((content) => {
+      if (filters.type && content.type !== filters.type) {
+        return false;
+      }
+
+      if (filters.genre && !content.genre?.includes(filters.genre)) {
+        return false;
+      }
+
+      const year = parseYear(content.year);
+      const yearFrom = filters.yearFrom ? Number(filters.yearFrom) : null;
+      const yearTo = filters.yearTo ? Number(filters.yearTo) : null;
+
+      if (yearFrom && year && year < yearFrom) {
+        return false;
+      }
+
+      if (yearTo && year && year > yearTo) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [filters, recommendations]);
+
+  const renderReasonTags = (content) => {
+    if (!preferences?.favorite_genres || !content.genre) return null;
+
+    const topGenres = Object.entries(preferences.favorite_genres)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([genre]) => genre);
+
+    const matches = content.genre
+      .split(',')
+      .map((g) => g.trim())
+      .filter((genre) => topGenres.includes(genre));
+
+    if (matches.length === 0) return null;
+
+    return (
+      <div className="tag-row">
+        {matches.slice(0, 2).map((genre) => (
+          <span key={genre} className="tag">
+            {genre}
+          </span>
+        ))}
+      </div>
+    );
   };
 
   if (loading) {
@@ -126,42 +245,87 @@ const AIRecommendations = () => {
     <div>
       <div className="panel">
         <h2>Senin İçin AI Önerileri</h2>
-        <p style={{ color: '#94a3b8' }}>
-          Beğenilerine, favori türlerine, oyuncu ve yönetmen tercihlerine göre önerilen içerikler.
+        <p className="muted">
+          OMDb verileri ile profil tercihlerini birleştirerek kişiselleştirilmiş öneriler.
         </p>
+        <div className="filter-grid">
+          <label>
+            Tür
+            <select
+              value={filters.genre}
+              onChange={(e) => setFilters((prev) => ({ ...prev, genre: e.target.value }))}
+            >
+              <option value="">Tümü</option>
+              {availableGenres.map((genre) => (
+                <option key={genre} value={genre}>
+                  {genre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Tür Tipi
+            <select
+              value={filters.type}
+              onChange={(e) => setFilters((prev) => ({ ...prev, type: e.target.value }))}
+            >
+              <option value="">Tümü</option>
+              <option value="movie">Film</option>
+              <option value="series">Dizi</option>
+            </select>
+          </label>
+          <label>
+            Yıl (Başlangıç)
+            <input
+              type="number"
+              min="1900"
+              max="2100"
+              placeholder="1990"
+              value={filters.yearFrom}
+              onChange={(e) => setFilters((prev) => ({ ...prev, yearFrom: e.target.value }))}
+            />
+          </label>
+          <label>
+            Yıl (Bitiş)
+            <input
+              type="number"
+              min="1900"
+              max="2100"
+              placeholder="2024"
+              value={filters.yearTo}
+              onChange={(e) => setFilters((prev) => ({ ...prev, yearTo: e.target.value }))}
+            />
+          </label>
+        </div>
+        {errorMessage && <p className="error-message">{errorMessage}</p>}
       </div>
 
-      {recommendations.length === 0 ? (
+      {filteredRecommendations.length === 0 ? (
         <div className="panel">
           <h3>Henüz öneri yok</h3>
-          <p style={{ color: '#94a3b8' }}>
-            Keşfet sekmesinden film ve dizileri puanlayarak AI'ya tercihlerini öğret!
+          <p className="muted">
+            Filtreleri temizleyerek daha fazla öneri görüntüleyebilirsin.
           </p>
         </div>
       ) : (
         <div className="panel">
           <div className="movie-grid">
-            {recommendations.map((content) => (
+            {filteredRecommendations.slice(0, 12).map((content) => (
               <div key={content.imdbId} className="movie-card">
                 <img
-                  src={
-                    content.poster && content.poster !== 'N/A'
-                      ? content.poster
-                      : 'https://via.placeholder.com/200x300?text=No+Poster'
-                  }
+                  src={getPoster(content.poster)}
                   alt={content.title}
                   className="movie-poster"
                 />
                 <div className="movie-info">
                   <div className="movie-title">{content.title}</div>
                   <div className="movie-year">
-                    {content.year} • IMDb: {content.imdbRating}/10
+                    {content.year} • IMDb: {content.imdbRating.toFixed(1)}
                   </div>
                   {content.aiScore && (
-                    <div style={{ fontSize: '0.8rem', color: '#818cf8', marginTop: '4px' }}>
-                      AI Skoru: {content.aiScore.toFixed(1)}
-                    </div>
+                    <div className="score-badge">AI Skoru: {content.aiScore.toFixed(1)}</div>
                   )}
+                  {renderReasonTags(content)}
                 </div>
               </div>
             ))}
