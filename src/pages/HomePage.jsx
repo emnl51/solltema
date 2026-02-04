@@ -334,6 +334,28 @@ const HomePage = () => {
       </div>
 
       <div className="panel">
+        <h2>Senin İçin Öneriler</h2>
+        <p className="muted">
+          Puanlama geçmişine göre kişiselleştirilmiş içerikler.
+        </p>
+        <div className="movie-grid">
+          {forYou.map((content) => (
+            <div key={content.imdbId} className="movie-card">
+              <img
+                src={getPoster(content.poster)}
+                alt={content.title}
+                className="movie-poster"
+              />
+              <div className="movie-info">
+                <div className="movie-title">{content.title}</div>
+                <div className="movie-year">{content.genre}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="panel">
         <h2>Son Puanladıkların</h2>
         {recentRatings.length === 0 ? (
           <p className="muted">
