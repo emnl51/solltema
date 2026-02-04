@@ -7,6 +7,8 @@ const ContentCard = ({
   badge,
   reason,
   footer,
+  onRate,
+  currentRating = 0,
 }) => {
   if (!content) return null;
 
@@ -42,6 +44,23 @@ const ContentCard = ({
           <div className="content-card-reason">
             <span>Neden önerildi:</span>
             <p>{reason}</p>
+          </div>
+        )}
+        {onRate && (
+          <div className="content-card-rating">
+            <span>Puanla:</span>
+            <div className="rating-stars compact">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  className={`star-button ${star <= currentRating ? 'filled' : ''}`}
+                  onClick={() => onRate(star)}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {footer && <div className="content-card-footer">{footer}</div>}

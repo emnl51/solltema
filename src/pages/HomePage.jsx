@@ -49,11 +49,12 @@ const getPoster = (poster) =>
   poster && poster !== 'N/A' ? poster : 'https://via.placeholder.com/320x480?text=No+Poster';
 
 const HomePage = () => {
-  const { user, getRatings, getContent } = useLocalStorage();
+  const { user, getRatings, getContent, saveContent, saveRating } = useLocalStorage();
   const [hero, setHero] = useState(null);
   const [featured, setFeatured] = useState([]);
   const [forYou, setForYou] = useState([]);
   const [recentRatings, setRecentRatings] = useState([]);
+  const [userRatings, setUserRatings] = useState({});
   const [preferences, setPreferences] = useState({
     genres: {},
     actors: {},
@@ -91,6 +92,12 @@ const HomePage = () => {
         .slice(0, 6);
 
       setRecentRatings(sorted);
+      setUserRatings(
+        ratings.reduce((acc, rating) => {
+          acc[rating.contentId] = rating.rating;
+          return acc;
+        }, {})
+      );
 
       const genreScores = {};
       const actorScores = {};
@@ -231,6 +238,33 @@ const HomePage = () => {
     return reasons.join(' • ');
   };
 
+  const handleRateContent = async (content, rating) => {
+    if (!content) return;
+
+    try {
+      await saveContent({
+        imdbId: content.imdbId,
+        title: content.title,
+        year: content.year,
+        type: content.type,
+        genre: content.genre,
+        director: content.director,
+        actors: content.actors,
+        plot: content.plot,
+        poster: content.poster,
+        imdbRating: parseFloat(content.imdbRating) || 0,
+        runtime: content.runtime,
+        metadata: content,
+      });
+
+      await saveRating(content.imdbId, rating, '');
+      setUserRatings((prev) => ({ ...prev, [content.imdbId]: rating }));
+    } catch (error) {
+      console.error('Rating error:', error);
+      setErrorMessage('Puanlama sırasında bir hata oluştu.');
+    }
+  };
+
   if (loading && !hero) {
     return (
       <div className="panel">
@@ -285,6 +319,8 @@ const HomePage = () => {
               content={content}
               badge={content.type === 'series' ? 'Dizi' : 'Film'}
               footer={<span className="content-card-foot">IMDb {content.imdbRating}</span>}
+              currentRating={userRatings[content.imdbId] || 0}
+              onRate={(rating) => handleRateContent(content, rating)}
             />
           ))}
         </div>
@@ -328,29 +364,9 @@ const HomePage = () => {
               badge={`Skor ${content.score.toFixed(1)}`}
               reason={getReason(content)}
               footer={<span className="content-card-foot">IMDb {content.imdbRating}</span>}
+              currentRating={userRatings[content.imdbId] || 0}
+              onRate={(rating) => handleRateContent(content, rating)}
             />
-          ))}
-        </div>
-      </div>
-
-      <div className="panel">
-        <h2>Senin İçin Öneriler</h2>
-        <p className="muted">
-          Puanlama geçmişine göre kişiselleştirilmiş içerikler.
-        </p>
-        <div className="movie-grid">
-          {forYou.map((content) => (
-            <div key={content.imdbId} className="movie-card">
-              <img
-                src={getPoster(content.poster)}
-                alt={content.title}
-                className="movie-poster"
-              />
-              <div className="movie-info">
-                <div className="movie-title">{content.title}</div>
-                <div className="movie-year">{content.genre}</div>
-              </div>
-            </div>
           ))}
         </div>
       </div>

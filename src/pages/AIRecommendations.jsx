@@ -51,10 +51,11 @@ const parseYear = (year) => {
 };
 
 const AIRecommendations = () => {
-  const { getRatings, getAllContents } = useLocalStorage();
+  const { getRatings, getAllContents, saveContent, saveRating } = useLocalStorage();
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [preferences, setPreferences] = useState(null);
+  const [userRatings, setUserRatings] = useState({});
   const [filters, setFilters] = useState({
     genre: '',
     type: '',
@@ -79,6 +80,12 @@ const AIRecommendations = () => {
 
       const pool = poolDetails.map(normalizeOmdb);
       const ratedIds = new Set(ratings.map((r) => r.contentId));
+      setUserRatings(
+        ratings.reduce((acc, rating) => {
+          acc[rating.contentId] = rating.rating;
+          return acc;
+        }, {})
+      );
       const availableContents = pool.filter((content) => !ratedIds.has(content.imdbId));
 
       const genres = {};
@@ -264,6 +271,33 @@ const AIRecommendations = () => {
     return reasons.join(' • ');
   };
 
+  const handleRateContent = async (content, rating) => {
+    if (!content) return;
+
+    try {
+      await saveContent({
+        imdbId: content.imdbId,
+        title: content.title,
+        year: content.year,
+        type: content.type,
+        genre: content.genre,
+        director: content.director,
+        actors: content.actors,
+        plot: content.plot,
+        poster: content.poster,
+        imdbRating: parseFloat(content.imdbRating) || 0,
+        runtime: content.runtime,
+        metadata: content,
+      });
+
+      await saveRating(content.imdbId, rating, '');
+      setUserRatings((prev) => ({ ...prev, [content.imdbId]: rating }));
+    } catch (error) {
+      console.error('Rating error:', error);
+      setErrorMessage('Puanlama sırasında bir hata oluştu.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="panel">
@@ -348,6 +382,8 @@ const AIRecommendations = () => {
                 badge={`AI ${content.aiScore.toFixed(1)}`}
                 reason={buildReason(content)}
                 footer={<span className="content-card-foot">IMDb {content.imdbRating.toFixed(1)}</span>}
+                currentRating={userRatings[content.imdbId] || 0}
+                onRate={(rating) => handleRateContent(content, rating)}
               />
             ))}
           </div>
