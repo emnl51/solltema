@@ -1,4 +1,4 @@
-const { useEffect, useMemo, useRef, useState } = React;
+const { useEffect, useMemo, useState } = React;
 
 const GENRES = ["Action", "Drama", "Comedy", "Sci-Fi"];
 
@@ -88,51 +88,15 @@ const useLiveSignals = () => {
   return signals;
 };
 
-const buildCsv = (headers, rows) => {
-  const escapeValue = (value) => {
-    const stringValue = String(value ?? "");
-    if (/[",\n]/.test(stringValue)) {
-      return `"${stringValue.replace(/"/g, '""')}"`;
-    }
-    return stringValue;
-  };
-
-  return [headers, ...rows].map((row) => row.map(escapeValue).join(",")).join("\n");
-};
-
-const parseCsv = (csvText) => {
-  const lines = csvText.trim().split(/\r?\n/);
-  if (lines.length < 2) {
-    return [];
-  }
-
-  const headers = lines[0].split(",").map((header) => header.trim());
-  return lines.slice(1).map((line) => {
-    const values = line.split(",");
-    return headers.reduce((acc, header, index) => {
-      acc[header] = values[index] ?? "";
-      return acc;
-    }, {});
-  });
-};
-
 const HybridApp = () => {
   const [profile, setProfile] = useState(createProfile());
-  const [profileName, setProfileName] = useState("Aylin");
-  const [profileGoal, setProfileGoal] = useState("Discover cinematic sci-fi");
   const [userFactors, setUserFactors] = useState(INITIAL_FACTORS.users.u1);
   const [feedbackLog, setFeedbackLog] = useState([]);
   const [isTraining, setIsTraining] = useState(false);
-  const [modelStatus, setModelStatus] = useState("Not trained");
-  const [modelMetrics, setModelMetrics] = useState(null);
-  const [importMessage, setImportMessage] = useState("");
 
-  const modelRef = useRef(null);
-  const fileInputRef = useRef(null);
   const liveSignals = useLiveSignals();
 
   const recommendations = useMemo(() => {
-    const model = modelRef.current;
     return MOVIES.map((movie) => {
       const contentScore = scoreContent(profile, movie);
       const mfScore = tf.tidy(() => {
@@ -141,67 +105,19 @@ const HybridApp = () => {
         return userTensor.dot(itemTensor).dataSync()[0];
       });
 
-      const modelScore = model
-        ? tf.tidy(() => {
-            const prediction = model.predict(tf.tensor2d([movie.genres]));
-            return prediction.dataSync()[0];
-          })
-        : contentScore;
-
-      const blended = normalizeScore(contentScore * 0.45 + mfScore * 0.25 + modelScore * 0.3);
+      const blended = normalizeScore(contentScore * 0.6 + mfScore * 0.4);
 
       return {
         ...movie,
         contentScore,
         mfScore,
-        modelScore,
         blended
       };
     }).sort((a, b) => b.blended - a.blended);
-  }, [profile, userFactors, modelStatus]);
+  }, [profile, userFactors]);
 
   const updateProfile = (genre, value) => {
     setProfile((prev) => ({ ...prev, [genre]: value }));
-  };
-
-  const createTrainingData = () => {
-    const weights = GENRES.map((genre) => profile[genre] || 0);
-    const xs = MOVIES.map((movie) => movie.genres);
-    const ys = xs.map((movieGenres) => {
-      const weighted = movieGenres.reduce((sum, value, index) => sum + value * weights[index], 0);
-      return normalizeScore(weighted * 0.9 + 0.05);
-    });
-    return { xs, ys };
-  };
-
-  const trainModel = async () => {
-    setIsTraining(true);
-    setModelStatus("Training...");
-
-    const { xs, ys } = createTrainingData();
-
-    const model = tf.sequential();
-    model.add(
-      tf.layers.dense({
-        units: 6,
-        activation: "relu",
-        inputShape: [GENRES.length]
-      })
-    );
-    model.add(tf.layers.dense({ units: 1, activation: "sigmoid" }));
-    model.compile({ optimizer: tf.train.adam(0.08), loss: "meanSquaredError" });
-
-    const history = await model.fit(tf.tensor2d(xs), tf.tensor2d(ys, [ys.length, 1]), {
-      epochs: 40,
-      batchSize: 5,
-      verbose: 0
-    });
-
-    modelRef.current = model;
-    const loss = history.history.loss.at(-1);
-    setModelMetrics({ loss: loss.toFixed(4), samples: xs.length });
-    setModelStatus("Trained");
-    setIsTraining(false);
   };
 
   const sendFeedback = async (movie, rating) => {
@@ -240,122 +156,10 @@ const HybridApp = () => {
     }
   };
 
-  const buildExportPayload = () => ({
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    profile: {
-      name: profileName,
-      goal: profileGoal,
-      affinities: profile
-    },
-    userFactors,
-    feedbackLog
-  });
-
-  const downloadFile = (filename, content, type) => {
-    const blob = new Blob([content], { type });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  };
-
-  const exportJson = () => {
-    const payload = buildExportPayload();
-    downloadFile(
-      `profile-export-${profileName || "user"}.json`,
-      JSON.stringify(payload, null, 2),
-      "application/json"
-    );
-  };
-
-  const exportCsv = () => {
-    const payload = buildExportPayload();
-    const rows = GENRES.map((genre) => [
-      profileName,
-      profileGoal,
-      genre,
-      payload.profile.affinities[genre],
-      userFactors[GENRES.indexOf(genre)] ?? "",
-      feedbackLog[0]?.rating ?? ""
-    ]);
-
-    const csvContent = buildCsv(
-      [
-        "profileName",
-        "profileGoal",
-        "genre",
-        "affinity",
-        "userFactor",
-        "latestRating"
-      ],
-      rows
-    );
-    downloadFile(`profile-export-${profileName || "user"}.csv`, csvContent, "text/csv");
-  };
-
-  const handleImport = (event) => {
-    const file = event.target.files[0];
-    if (!file) {
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        if (file.name.endsWith(".json")) {
-          const payload = JSON.parse(reader.result);
-          if (!payload.profile || !payload.profile.affinities) {
-            throw new Error("JSON profile missing.");
-          }
-          setProfileName(payload.profile.name || "Imported user");
-          setProfileGoal(payload.profile.goal || "");
-          setProfile({ ...createProfile(), ...payload.profile.affinities });
-          setUserFactors(payload.userFactors || INITIAL_FACTORS.users.u1);
-          setFeedbackLog(payload.feedbackLog || []);
-          setImportMessage("JSON profile imported successfully.");
-        } else if (file.name.endsWith(".csv")) {
-          const rows = parseCsv(reader.result);
-          if (!rows.length) {
-            throw new Error("CSV file is empty.");
-          }
-          const name = rows[0].profileName || "Imported user";
-          const goal = rows[0].profileGoal || "";
-          const affinities = rows.reduce((acc, row) => {
-            if (row.genre && GENRES.includes(row.genre)) {
-              acc[row.genre] = Number(row.affinity) || 0;
-            }
-            return acc;
-          }, {});
-          const factors = rows.map((row) => Number(row.userFactor) || 0);
-          setProfileName(name);
-          setProfileGoal(goal);
-          setProfile({ ...createProfile(), ...affinities });
-          if (factors.length >= GENRES.length) {
-            setUserFactors(factors.slice(0, userFactors.length));
-          }
-          setImportMessage("CSV profile imported successfully.");
-        } else {
-          throw new Error("Unsupported file format.");
-        }
-      } catch (error) {
-        setImportMessage(`Import failed: ${error.message}`);
-      }
-    };
-
-    reader.readAsText(file);
-    event.target.value = "";
-  };
-
   const resetProfile = () => {
     setProfile(createProfile());
     setUserFactors(INITIAL_FACTORS.users.u1);
     setFeedbackLog([]);
-    setModelStatus("Not trained");
-    setModelMetrics(null);
-    setImportMessage("");
-    modelRef.current = null;
   };
 
   return (
@@ -377,36 +181,6 @@ const HybridApp = () => {
       </header>
 
       <main className="layout">
-        <section className="panel">
-          <h2>User profile creation</h2>
-          <div className="form-grid">
-            <label className="field">
-              <span>Profile name</span>
-              <input
-                type="text"
-                value={profileName}
-                onChange={(event) => setProfileName(event.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span>Viewing goal</span>
-              <input
-                type="text"
-                value={profileGoal}
-                onChange={(event) => setProfileGoal(event.target.value)}
-              />
-            </label>
-          </div>
-          <div className="profile-card">
-            <strong>{profileName}</strong>
-            <span>{profileGoal}</span>
-            <p>
-              Preference vector calibrated to your signals. Tune affinities below and train the
-              model to update your personalized ranking.
-            </p>
-          </div>
-        </section>
-
         <section className="panel">
           <h2>Preference tuning</h2>
           <div className="slider-group">
@@ -444,61 +218,6 @@ const HybridApp = () => {
         </section>
 
         <section className="panel">
-          <h2>Modeling & training</h2>
-          <p>
-            Train a lightweight TensorFlow.js model on your profile to refine content relevance
-            signals. The trained model injects an additional score into the hybrid ranking.
-          </p>
-          <div className="training-grid">
-            <div>
-              <div className="status">Model status</div>
-              <strong>{modelStatus}</strong>
-            </div>
-            <div>
-              <div className="status">Training loss</div>
-              <strong>{modelMetrics ? modelMetrics.loss : "--"}</strong>
-            </div>
-            <div>
-              <div className="status">Samples</div>
-              <strong>{modelMetrics ? modelMetrics.samples : "--"}</strong>
-            </div>
-          </div>
-          <div className="controls">
-            <button onClick={trainModel} disabled={isTraining}>
-              Train profile model
-            </button>
-          </div>
-        </section>
-
-        <section className="panel">
-          <h2>Import & export profiles</h2>
-          <p>
-            Export your profile and feedback to JSON or CSV, then re-import it later to resume
-            personalized recommendations.
-          </p>
-          <div className="controls">
-            <button onClick={exportJson}>Export JSON</button>
-            <button className="secondary" onClick={exportCsv}>
-              Export CSV
-            </button>
-            <button
-              className="secondary"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              Import JSON/CSV
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,.csv"
-              className="file-input"
-              onChange={handleImport}
-            />
-          </div>
-          {importMessage ? <div className="import-message">{importMessage}</div> : null}
-        </section>
-
-        <section className="panel">
           <h2>Personalized recommendations</h2>
           <div className="slider-group">
             {recommendations.map((movie) => (
@@ -519,7 +238,6 @@ const HybridApp = () => {
                 <div className="score-grid">
                   <div className="score">Content score: {movie.contentScore.toFixed(2)}</div>
                   <div className="score">MF score: {movie.mfScore.toFixed(2)}</div>
-                  <div className="score">Model score: {movie.modelScore.toFixed(2)}</div>
                   <div className="score">Hybrid rank: {movie.blended.toFixed(2)}</div>
                 </div>
               </div>

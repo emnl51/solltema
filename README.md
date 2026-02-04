@@ -9,6 +9,12 @@ A lightweight hybrid movie recommendation demo that combines real-time signal in
 - **Client-side model training** with TensorFlow.js to refine recommendation quality.
 - **Online learning loop** that updates the user factors with every feedback tap.
 - **Profile import/export** via JSON or CSV to resume personalization.
+A lightweight hybrid movie recommendation demo that combines real-time signal ingestion, content-based filtering, matrix factorization, and online learning. The prototype uses a small Node.js HTTP server and a React + TensorFlow.js front-end.
+
+## Features
+
+- **Hybrid ranking** that blends content scores with matrix-factorization embeddings.
+- **Online learning loop** that updates the user factors with every feedback tap.
 - **Live signal panel** showcasing simulated real-time data insights.
 - **Responsive UI** designed for web and mobile layouts.
 

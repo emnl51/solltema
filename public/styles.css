@@ -78,59 +78,6 @@ body {
   width: 100%;
 }
 
-.form-grid {
-  display: grid;
-  gap: 12px;
-}
-
-.field {
-  display: grid;
-  gap: 6px;
-  font-size: 0.9rem;
-}
-
-.field input {
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  font-size: 0.95rem;
-}
-
-.profile-card {
-  margin-top: 16px;
-  padding: 14px 16px;
-  border-radius: 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  display: grid;
-  gap: 6px;
-}
-
-.training-grid {
-  margin-top: 16px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 12px;
-}
-
-.status {
-  font-size: 0.8rem;
-  color: #64748b;
-}
-
-.import-message {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  font-size: 0.9rem;
-}
-
-.file-input {
-  display: none;
-}
-
 .recommendation {
   padding: 16px;
   border-radius: 14px;
@@ -186,16 +133,10 @@ button.secondary {
   color: #1e293b;
 }
 
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 .controls {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
-  margin-top: 16px;
 }
 
 footer {
