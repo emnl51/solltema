@@ -16,6 +16,16 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const normalizeAuthError = (error) => {
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      return new Error(
+        'Sunucuya bağlanılamadı. Supabase URL/anahtar ve ağ bağlantısını kontrol edin.'
+      );
+    }
+
+    return error;
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -95,7 +105,22 @@ export const AuthProvider = ({ children }) => {
       password: normalizedPassword,
     });
 
-    if (error) throw error;
+    if (!normalizedEmail || !normalizedPassword) {
+      throw new Error('E-posta ve şifre alanları zorunludur.');
+    }
+
+    let data;
+    try {
+      const response = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password: normalizedPassword,
+      });
+      data = response.data;
+
+      if (response.error) throw response.error;
+    } catch (error) {
+      throw normalizeAuthError(error);
+    }
 
     if (data.user) {
       const { error: profileError } = await supabase.from('profiles').upsert(
@@ -129,8 +154,21 @@ export const AuthProvider = ({ children }) => {
       password: normalizedPassword,
     });
 
-    if (error) throw error;
-    return data;
+    if (!normalizedEmail || !normalizedPassword) {
+      throw new Error('E-posta ve şifre alanları zorunludur.');
+    }
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password: normalizedPassword,
+      });
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      throw normalizeAuthError(error);
+    }
   };
 
   const signOut = async () => {
