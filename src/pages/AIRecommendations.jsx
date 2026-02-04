@@ -1,75 +1,97 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
+import { useLocalStorage } from '../contexts/LocalStorageContext';
 
 const AIRecommendations = () => {
-  const { user } = useAuth();
+  const { getRatings, getAllContents } = useLocalStorage();
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [preferences, setPreferences] = useState(null);
 
   useEffect(() => {
     loadRecommendations();
-  }, [user]);
+  }, []);
 
   const loadRecommendations = async () => {
-    if (!user) return;
-
     try {
-      const { data: userPrefs } = await supabase
-        .from('user_preferences')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const ratings = await getRatings();
+      const allContents = await getAllContents();
+
+      const ratedIds = ratings.map((r) => r.contentId);
+
+      const availableContents = allContents.filter((c) => !ratedIds.includes(c.imdbId));
+
+      const genres = {};
+      const directors = {};
+      const actors = {};
+      let totalRating = 0;
+
+      ratings.forEach((rating) => {
+        totalRating += rating.rating;
+        const content = allContents.find((c) => c.imdbId === rating.contentId);
+
+        if (content) {
+          if (content.genre) {
+            content.genre.split(',').forEach((g) => {
+              const genre = g.trim();
+              genres[genre] = (genres[genre] || 0) + rating.rating;
+            });
+          }
+
+          if (content.director && content.director !== 'N/A') {
+            content.director.split(',').forEach((d) => {
+              const director = d.trim();
+              directors[director] = (directors[director] || 0) + 1;
+            });
+          }
+
+          if (content.actors) {
+            content.actors.split(',').forEach((a) => {
+              const actor = a.trim();
+              actors[actor] = (actors[actor] || 0) + 1;
+            });
+          }
+        }
+      });
+
+      const avgRating = ratings.length > 0 ? totalRating / ratings.length : 0;
+
+      const userPrefs = {
+        favorite_genres: genres,
+        favorite_directors: directors,
+        favorite_actors: actors,
+        average_rating: avgRating,
+        total_watched: ratings.length,
+      };
 
       setPreferences(userPrefs);
 
-      const { data: userRatings } = await supabase
-        .from('ratings')
-        .select('content_id')
-        .eq('user_id', user.id);
-
-      const ratedIds = userRatings?.map((r) => r.content_id) || [];
-
-      let query = supabase
-        .from('contents')
-        .select('*')
-        .order('imdb_rating', { ascending: false })
-        .limit(20);
-
-      if (ratedIds.length > 0) {
-        query = query.not('id', 'in', `(${ratedIds.join(',')})`);
-      }
-
-      const { data: allContents } = await query;
-
-      if (allContents && userPrefs && userPrefs.favorite_genres) {
-        const scored = allContents.map((content) => {
-          let score = parseFloat(content.imdb_rating) || 0;
+      if (availableContents.length > 0 && Object.keys(genres).length > 0) {
+        const scored = availableContents.map((content) => {
+          let score = parseFloat(content.imdbRating) || 0;
 
           if (content.genre) {
-            const genres = content.genre.split(',').map((g) => g.trim());
-            genres.forEach((genre) => {
-              if (userPrefs.favorite_genres[genre]) {
-                score += userPrefs.favorite_genres[genre] * 0.5;
+            const contentGenres = content.genre.split(',').map((g) => g.trim());
+            contentGenres.forEach((genre) => {
+              if (genres[genre]) {
+                score += genres[genre] * 0.5;
               }
             });
           }
 
-          if (content.director && userPrefs.favorite_directors) {
-            const directors = content.director.split(',').map((d) => d.trim());
-            directors.forEach((director) => {
-              if (userPrefs.favorite_directors[director]) {
-                score += userPrefs.favorite_directors[director] * 0.3;
+          if (content.director && directors) {
+            const directorsList = content.director.split(',').map((d) => d.trim());
+            directorsList.forEach((director) => {
+              if (directors[director]) {
+                score += directors[director] * 0.3;
               }
             });
           }
 
-          if (content.actors && userPrefs.favorite_actors) {
-            const actors = content.actors.split(',').map((a) => a.trim());
-            actors.forEach((actor) => {
-              if (userPrefs.favorite_actors[actor]) {
-                score += userPrefs.favorite_actors[actor] * 0.2;
+          if (content.actors && actors) {
+            const actorsList = content.actors.split(',').map((a) => a.trim());
+            actorsList.forEach((actor) => {
+              if (actors[actor]) {
+                score += actors[actor] * 0.2;
               }
             });
           }
@@ -80,7 +102,10 @@ const AIRecommendations = () => {
         scored.sort((a, b) => b.aiScore - a.aiScore);
         setRecommendations(scored.slice(0, 12));
       } else {
-        setRecommendations(allContents?.slice(0, 12) || []);
+        const topByRating = availableContents.sort((a, b) =>
+          (parseFloat(b.imdbRating) || 0) - (parseFloat(a.imdbRating) || 0)
+        ).slice(0, 12);
+        setRecommendations(topByRating);
       }
     } catch (error) {
       console.error('Error loading recommendations:', error);
@@ -117,10 +142,10 @@ const AIRecommendations = () => {
         <div className="panel">
           <div className="movie-grid">
             {recommendations.map((content) => (
-              <div key={content.id} className="movie-card">
+              <div key={content.imdbId} className="movie-card">
                 <img
                   src={
-                    content.poster !== 'N/A'
+                    content.poster && content.poster !== 'N/A'
                       ? content.poster
                       : 'https://via.placeholder.com/200x300?text=No+Poster'
                   }
@@ -130,7 +155,7 @@ const AIRecommendations = () => {
                 <div className="movie-info">
                   <div className="movie-title">{content.title}</div>
                   <div className="movie-year">
-                    {content.year} • IMDb: {content.imdb_rating}/10
+                    {content.year} • IMDb: {content.imdbRating}/10
                   </div>
                   {content.aiScore && (
                     <div style={{ fontSize: '0.8rem', color: '#818cf8', marginTop: '4px' }}>
@@ -161,9 +186,7 @@ const AIRecommendations = () => {
             <div className="stat-card">
               <div className="stat-label">Favori Türler</div>
               <div className="stat-value" style={{ fontSize: '1.1rem' }}>
-                {preferences.favorite_genres
-                  ? Object.keys(preferences.favorite_genres).slice(0, 3).join(', ')
-                  : '-'}
+                {Object.keys(preferences.favorite_genres).slice(0, 3).join(', ') || '-'}
               </div>
             </div>
           </div>

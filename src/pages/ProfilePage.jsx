@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
+import { useLocalStorage } from '../contexts/LocalStorageContext';
 
 const ProfilePage = () => {
-  const { user, profile } = useAuth();
+  const { user, updateUserDisplayName, getRatings, getContent } = useLocalStorage();
   const [preferences, setPreferences] = useState(null);
   const [allRatings, setAllRatings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -11,34 +10,67 @@ const ProfilePage = () => {
   const [displayName, setDisplayName] = useState('');
 
   useEffect(() => {
-    if (profile) {
-      setDisplayName(profile.display_name || '');
+    if (user) {
+      setDisplayName(user.displayName || '');
     }
     loadProfileData();
-  }, [user, profile]);
+  }, []);
 
   const loadProfileData = async () => {
-    if (!user) return;
-
     try {
-      const { data: userPrefs } = await supabase
-        .from('user_preferences')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const ratings = await getRatings();
 
-      setPreferences(userPrefs);
+      const ratingsWithContent = await Promise.all(
+        ratings.map(async (rating) => ({
+          ...rating,
+          content: await getContent(rating.contentId),
+        }))
+      );
 
-      const { data: ratings } = await supabase
-        .from('ratings')
-        .select(`
-          *,
-          contents (*)
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      setAllRatings(ratingsWithContent.sort((a, b) =>
+        new Date(b.updatedAt) - new Date(a.updatedAt)
+      ));
 
-      setAllRatings(ratings || []);
+      const genres = {};
+      const directors = {};
+      const actors = {};
+      let totalRating = 0;
+
+      ratings.forEach((rating) => {
+        totalRating += rating.rating;
+        const content = ratingsWithContent.find(r => r.contentId === rating.contentId)?.content;
+
+        if (content) {
+          if (content.genre) {
+            content.genre.split(',').forEach((g) => {
+              const genre = g.trim();
+              genres[genre] = (genres[genre] || 0) + rating.rating;
+            });
+          }
+
+          if (content.director && content.director !== 'N/A') {
+            content.director.split(',').forEach((d) => {
+              const director = d.trim();
+              directors[director] = (directors[director] || 0) + 1;
+            });
+          }
+
+          if (content.actors) {
+            content.actors.split(',').forEach((a) => {
+              const actor = a.trim();
+              actors[actor] = (actors[actor] || 0) + 1;
+            });
+          }
+        }
+      });
+
+      setPreferences({
+        favorite_genres: genres,
+        favorite_directors: directors,
+        favorite_actors: actors,
+        average_rating: ratings.length > 0 ? totalRating / ratings.length : 0,
+        total_watched: ratings.length,
+      });
     } catch (error) {
       console.error('Error loading profile:', error);
     } finally {
@@ -48,11 +80,7 @@ const ProfilePage = () => {
 
   const handleUpdateProfile = async () => {
     try {
-      await supabase
-        .from('profiles')
-        .update({ display_name: displayName })
-        .eq('user_id', user.id);
-
+      updateUserDisplayName(displayName);
       setIsEditing(false);
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -120,8 +148,7 @@ const ProfilePage = () => {
               </div>
             ) : (
               <>
-                <h2>{profile?.display_name || 'Kullanıcı'}</h2>
-                <p style={{ color: '#94a3b8', margin: '8px 0' }}>{user?.email}</p>
+                <h2>{user?.displayName || 'Kullanıcı'}</h2>
                 <button className="ghost" onClick={() => setIsEditing(true)}>
                   Profili Düzenle
                 </button>
@@ -209,15 +236,15 @@ const ProfilePage = () => {
               <div key={rating.id} className="movie-card">
                 <img
                   src={
-                    rating.contents?.poster !== 'N/A'
-                      ? rating.contents?.poster
+                    rating.content?.poster && rating.content.poster !== 'N/A'
+                      ? rating.content.poster
                       : 'https://via.placeholder.com/200x300?text=No+Poster'
                   }
-                  alt={rating.contents?.title}
+                  alt={rating.content?.title}
                   className="movie-poster"
                 />
                 <div className="movie-info">
-                  <div className="movie-title">{rating.contents?.title}</div>
+                  <div className="movie-title">{rating.content?.title}</div>
                   <div className="movie-year">
                     Puanın: {rating.rating}/10
                   </div>

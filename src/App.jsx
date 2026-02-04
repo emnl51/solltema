@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import AuthPage from './pages/AuthPage';
+import { LocalStorageProvider, useLocalStorage } from './contexts/LocalStorageContext';
 import HomePage from './pages/HomePage';
 import AIRecommendations from './pages/AIRecommendations';
 import ProfilePage from './pages/ProfilePage';
@@ -8,7 +7,7 @@ import SearchPage from './pages/SearchPage';
 import './App.css';
 
 const AppContent = () => {
-  const { user, loading } = useAuth();
+  const { loading } = useLocalStorage();
   const [activePage, setActivePage] = useState('Ana Ekran');
 
   if (loading) {
@@ -18,10 +17,6 @@ const AppContent = () => {
         <p>Yükleniyor...</p>
       </div>
     );
-  }
-
-  if (!user) {
-    return <AuthPage />;
   }
 
   return (
@@ -59,9 +54,9 @@ const AppContent = () => {
 
 const App = () => {
   return (
-    <AuthProvider>
+    <LocalStorageProvider>
       <AppContent />
-    </AuthProvider>
+    </LocalStorageProvider>
   );
 };
 
