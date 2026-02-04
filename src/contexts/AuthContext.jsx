@@ -82,29 +82,51 @@ export const AuthProvider = ({ children }) => {
   };
 
   const signUp = async (email, password, displayName) => {
+    const normalizedEmail = email?.trim();
+    const normalizedPassword = password?.trim();
+    const normalizedDisplayName = displayName?.trim();
+
+    if (!normalizedEmail || !normalizedPassword) {
+      throw new Error('E-posta ve şifre alanları zorunludur.');
+    }
+
     const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
+      email: normalizedEmail,
+      password: normalizedPassword,
     });
 
     if (error) throw error;
 
     if (data.user) {
-      await supabase.from('profiles').insert([
+      const { error: profileError } = await supabase.from('profiles').upsert(
         {
           user_id: data.user.id,
-          display_name: displayName || 'Kullanıcı',
+          display_name: normalizedDisplayName || 'Kullanıcı',
         },
-      ]);
+        {
+          onConflict: 'user_id',
+        }
+      );
+
+      if (profileError) {
+        throw profileError;
+      }
     }
 
     return data;
   };
 
   const signIn = async (email, password) => {
+    const normalizedEmail = email?.trim();
+    const normalizedPassword = password?.trim();
+
+    if (!normalizedEmail || !normalizedPassword) {
+      throw new Error('E-posta ve şifre alanları zorunludur.');
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+      email: normalizedEmail,
+      password: normalizedPassword,
     });
 
     if (error) throw error;
