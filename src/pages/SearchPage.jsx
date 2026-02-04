@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { omdbApi, supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
+import { useLocalStorage } from '../contexts/LocalStorageContext';
 
 const SearchPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -13,7 +12,44 @@ const SearchPage = () => {
   const [review, setReview] = useState('');
   const [savingRating, setSavingRating] = useState(false);
 
-  const { user } = useAuth();
+  const { saveRating, getContent, getRatings, saveContent } = useLocalStorage();
+
+  const omdbApi = {
+    search: async (query, type = '', page = 1) => {
+      const params = new URLSearchParams({
+        s: query,
+        page: page.toString(),
+      });
+
+      if (type) {
+        params.append('type', type);
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/omdb?${params.toString()}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+        }
+      );
+
+      return response.json();
+    },
+
+    getById: async (imdbId) => {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/omdb?i=${imdbId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+        }
+      );
+
+      return response.json();
+    },
+  };
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -42,12 +78,8 @@ const SearchPage = () => {
       const details = await omdbApi.getById(movie.imdbID);
       setMovieDetails(details);
 
-      const { data: existingRating } = await supabase
-        .from('ratings')
-        .select('rating, review')
-        .eq('user_id', user.id)
-        .eq('content_id', movie.imdbID)
-        .maybeSingle();
+      const ratings = await getRatings();
+      const existingRating = ratings.find(r => r.contentId === movie.imdbID);
 
       if (existingRating) {
         setUserRating(existingRating.rating);
@@ -70,134 +102,29 @@ const SearchPage = () => {
     setSavingRating(true);
 
     try {
-      let contentId = null;
+      await saveContent({
+        imdbId: movieDetails.imdbID,
+        title: movieDetails.Title,
+        year: movieDetails.Year,
+        type: movieDetails.Type,
+        genre: movieDetails.Genre,
+        director: movieDetails.Director,
+        actors: movieDetails.Actors,
+        plot: movieDetails.Plot,
+        poster: movieDetails.Poster,
+        imdbRating: parseFloat(movieDetails.imdbRating) || 0,
+        runtime: movieDetails.Runtime,
+        language: movieDetails.Language,
+        country: movieDetails.Country,
+        awards: movieDetails.Awards,
+        metadata: movieDetails,
+      });
 
-      const { data: existingContent } = await supabase
-        .from('contents')
-        .select('id')
-        .eq('imdb_id', movieDetails.imdbID)
-        .maybeSingle();
-
-      if (existingContent) {
-        contentId = existingContent.id;
-      } else {
-        const { data: newContent, error: insertError } = await supabase
-          .from('contents')
-          .insert([
-            {
-              imdb_id: movieDetails.imdbID,
-              title: movieDetails.Title,
-              year: movieDetails.Year,
-              type: movieDetails.Type,
-              genre: movieDetails.Genre,
-              director: movieDetails.Director,
-              actors: movieDetails.Actors,
-              plot: movieDetails.Plot,
-              poster: movieDetails.Poster,
-              imdb_rating: parseFloat(movieDetails.imdbRating) || 0,
-              runtime: movieDetails.Runtime,
-              language: movieDetails.Language,
-              country: movieDetails.Country,
-              awards: movieDetails.Awards,
-              metadata: movieDetails,
-            },
-          ])
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-        contentId = newContent.id;
-      }
-
-      const { error: ratingError } = await supabase
-        .from('ratings')
-        .upsert(
-          {
-            user_id: user.id,
-            content_id: contentId,
-            rating: rating,
-            review: review,
-          },
-          {
-            onConflict: 'user_id,content_id',
-          }
-        );
-
-      if (ratingError) throw ratingError;
-
-      await updateUserPreferences();
+      await saveRating(movieDetails.imdbID, rating, review);
     } catch (error) {
       console.error('Error saving rating:', error);
     } finally {
       setSavingRating(false);
-    }
-  };
-
-  const updateUserPreferences = async () => {
-    try {
-      const { data: allRatings } = await supabase
-        .from('ratings')
-        .select(`
-          rating,
-          contents (
-            genre,
-            director,
-            actors
-          )
-        `)
-        .eq('user_id', user.id);
-
-      if (!allRatings) return;
-
-      const genreMap = {};
-      const actorMap = {};
-      const directorMap = {};
-      let totalRating = 0;
-
-      allRatings.forEach((r) => {
-        if (r.contents) {
-          totalRating += r.rating;
-
-          if (r.contents.genre) {
-            r.contents.genre.split(',').forEach((g) => {
-              const genre = g.trim();
-              genreMap[genre] = (genreMap[genre] || 0) + r.rating;
-            });
-          }
-
-          if (r.contents.actors) {
-            r.contents.actors.split(',').forEach((a) => {
-              const actor = a.trim();
-              actorMap[actor] = (actorMap[actor] || 0) + 1;
-            });
-          }
-
-          if (r.contents.director && r.contents.director !== 'N/A') {
-            r.contents.director.split(',').forEach((d) => {
-              const director = d.trim();
-              directorMap[director] = (directorMap[director] || 0) + 1;
-            });
-          }
-        }
-      });
-
-      const avgRating = allRatings.length > 0 ? totalRating / allRatings.length : 0;
-
-      await supabase.from('user_preferences').upsert(
-        {
-          user_id: user.id,
-          favorite_genres: genreMap,
-          favorite_actors: actorMap,
-          favorite_directors: directorMap,
-          average_rating: avgRating,
-          total_watched: allRatings.length,
-        },
-        {
-          onConflict: 'user_id',
-        }
-      );
-    } catch (error) {
-      console.error('Error updating preferences:', error);
     }
   };
 
