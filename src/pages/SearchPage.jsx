@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useLocalStorage } from '../contexts/LocalStorageContext';
+import { fetchById, searchTitles } from '../lib/omdb';
 
 const SearchPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchType, setSearchType] = useState('');
+  const [searchYear, setSearchYear] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedMovie, setSelectedMovie] = useState(null);
@@ -11,60 +13,31 @@ const SearchPage = () => {
   const [userRating, setUserRating] = useState(0);
   const [review, setReview] = useState('');
   const [savingRating, setSavingRating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const { saveRating, getContent, getRatings, saveContent } = useLocalStorage();
-
-  const omdbApi = {
-    search: async (query, type = '', page = 1) => {
-      const params = new URLSearchParams({
-        s: query,
-        page: page.toString(),
-      });
-
-      if (type) {
-        params.append('type', type);
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/omdb?${params.toString()}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
-        }
-      );
-
-      return response.json();
-    },
-
-    getById: async (imdbId) => {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/omdb?i=${imdbId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
-        }
-      );
-
-      return response.json();
-    },
-  };
+  const { saveRating, getRatings, saveContent } = useLocalStorage();
 
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
 
     setLoading(true);
+    setErrorMessage('');
     try {
-      const data = await omdbApi.search(searchQuery, searchType);
+      const data = await searchTitles(searchQuery, {
+        type: searchType,
+        year: searchYear,
+      });
+
       if (data.Search) {
         setSearchResults(data.Search);
       } else {
         setSearchResults([]);
+        setErrorMessage(data.Error || 'Aranan kriterlerde sonuç bulunamadı.');
       }
     } catch (error) {
       console.error('Search error:', error);
+      setErrorMessage('OMDb araması başarısız oldu. Lütfen tekrar deneyin.');
     } finally {
       setLoading(false);
     }
@@ -75,11 +48,11 @@ const SearchPage = () => {
     setLoading(true);
 
     try {
-      const details = await omdbApi.getById(movie.imdbID);
+      const details = await fetchById(movie.imdbID);
       setMovieDetails(details);
 
       const ratings = await getRatings();
-      const existingRating = ratings.find(r => r.contentId === movie.imdbID);
+      const existingRating = ratings.find((r) => r.contentId === movie.imdbID);
 
       if (existingRating) {
         setUserRating(existingRating.rating);
@@ -90,6 +63,7 @@ const SearchPage = () => {
       }
     } catch (error) {
       console.error('Error fetching movie details:', error);
+      setErrorMessage('Detaylar yüklenemedi. Lütfen tekrar deneyin.');
     } finally {
       setLoading(false);
     }
@@ -123,6 +97,7 @@ const SearchPage = () => {
       await saveRating(movieDetails.imdbID, rating, review);
     } catch (error) {
       console.error('Error saving rating:', error);
+      setErrorMessage('Puan kaydedilemedi. Lütfen tekrar deneyin.');
     } finally {
       setSavingRating(false);
     }
@@ -135,10 +110,15 @@ const SearchPage = () => {
     setReview('');
   };
 
+  const totalResults = useMemo(() => searchResults.length, [searchResults]);
+
   return (
     <div>
       <div className="panel">
-        <h2>Film ve Dizi Ara</h2>
+        <h2>Film ve Dizi Keşfet</h2>
+        <p className="muted">
+          OMDb API verileriyle içerik ara, filtrele ve listene ekle.
+        </p>
         <form onSubmit={handleSearch} className="search-bar">
           <input
             type="text"
@@ -151,15 +131,30 @@ const SearchPage = () => {
             <option value="movie">Film</option>
             <option value="series">Dizi</option>
           </select>
+          <input
+            type="number"
+            min="1900"
+            max="2100"
+            placeholder="Yıl"
+            value={searchYear}
+            onChange={(e) => setSearchYear(e.target.value)}
+            className="year-input"
+          />
           <button type="submit" disabled={loading}>
             {loading ? 'Aranıyor...' : 'Ara'}
           </button>
         </form>
+        {errorMessage && <p className="error-message">{errorMessage}</p>}
       </div>
 
       {searchResults.length > 0 && (
         <div className="panel">
-          <h2>Arama Sonuçları ({searchResults.length})</h2>
+          <div className="section-header">
+            <div>
+              <h2>Arama Sonuçları ({totalResults})</h2>
+              <p className="muted">Detay görmek için karta tıklayın.</p>
+            </div>
+          </div>
           <div className="movie-grid">
             {searchResults.map((movie) => (
               <div
@@ -168,7 +163,11 @@ const SearchPage = () => {
                 onClick={() => handleMovieClick(movie)}
               >
                 <img
-                  src={movie.Poster !== 'N/A' ? movie.Poster : 'https://via.placeholder.com/200x300?text=No+Poster'}
+                  src={
+                    movie.Poster !== 'N/A'
+                      ? movie.Poster
+                      : 'https://via.placeholder.com/200x300?text=No+Poster'
+                  }
                   alt={movie.Title}
                   className="movie-poster"
                 />
@@ -186,7 +185,12 @@ const SearchPage = () => {
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{movieDetails.Title}</h2>
+              <div>
+                <h2>{movieDetails.Title}</h2>
+                <p className="muted">
+                  {movieDetails.Year} • {movieDetails.Genre} • {movieDetails.Runtime}
+                </p>
+              </div>
               <button className="ghost" onClick={closeModal}>
                 Kapat
               </button>
@@ -195,7 +199,11 @@ const SearchPage = () => {
             <div className="modal-content">
               <div className="movie-detail-grid">
                 <img
-                  src={movieDetails.Poster !== 'N/A' ? movieDetails.Poster : 'https://via.placeholder.com/200x300'}
+                  src={
+                    movieDetails.Poster !== 'N/A'
+                      ? movieDetails.Poster
+                      : 'https://via.placeholder.com/200x300'
+                  }
                   alt={movieDetails.Title}
                   className="movie-detail-poster"
                 />
